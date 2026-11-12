@@ -1,0 +1,32 @@
+
+name: Inspect Textile QC Project
+
+on:
+  workflow_dispatch:
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Check ZIP file
+        run: |
+          ls -lah
+          unzip -l Textile_QC_Assistant_Android_Project.zip
+
+      - name: Extract project
+        run: |
+          unzip -o Textile_QC_Assistant_Android_Project.zip -d project
+
+      - name: Show project structure
+        run: |
+          echo "PROJECT FILES"
+          find project -maxdepth 5 -type f | sort
+
+      - name: Check Gradle Wrapper
+        run: |
+          find project -name gradlew -type f
+          find project -name gradle-wrapper.properties -type f
