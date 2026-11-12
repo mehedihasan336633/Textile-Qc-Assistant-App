@@ -1,5 +1,5 @@
 
-name: Inspect Textile QC Project
+name: Diagnose Android Project
 
 on:
   workflow_dispatch:
@@ -7,26 +7,32 @@ on:
 jobs:
   inspect:
     runs-on: ubuntu-latest
-
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Check ZIP file
-        run: |
-          ls -lah
-          unzip -l Textile_QC_Assistant_Android_Project.zip
+      - name: Extract ZIP
+        run: unzip -o Textile_QC_Assistant_Android_Project.zip -d project
 
-      - name: Extract project
+      - name: Inspect Gradle files
         run: |
-          unzip -o Textile_QC_Assistant_Android_Project.zip -d project
+          echo "===== ROOT SETTINGS ====="
+          cat project/settings.gradle.kts
 
-      - name: Show project structure
-        run: |
-          echo "PROJECT FILES"
-          find project -maxdepth 5 -type f | sort
+          echo "===== ROOT BUILD ====="
+          cat project/build.gradle.kts
 
-      - name: Check Gradle Wrapper
+          echo "===== ROOT APP BUILD ====="
+          cat project/app/build.gradle.kts
+
+          echo "===== ANDROID SETTINGS ====="
+          cat project/android/settings.gradle.kts
+
+          echo "===== ANDROID BUILD ====="
+          cat project/android/build.gradle.kts
+
+          echo "===== ANDROID APP BUILD ====="
+          cat project/android/app/build.gradle.kts
+
+      - name: Inspect Android source files
         run: |
-          find project -name gradlew -type f
-          find project -name gradle-wrapper.properties -type f
+          find project -type f \( -name "*.kt" -o -name "*.java" -o -name "AndroidManifest.xml" \) -print
