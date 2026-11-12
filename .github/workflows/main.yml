@@ -34,6 +34,7 @@ jobs:
         with:
           gradle-version: '8.9'
 
+      
       - name: Fix Java Kotlin target
         run: |
           python3 - <<'PY'
@@ -42,7 +43,7 @@ jobs:
           p = Path("project/app/build.gradle.kts")
           s = p.read_text()
 
-          fix = '''
+          fix = """
               compileOptions {
                   sourceCompatibility = JavaVersion.VERSION_17
                   targetCompatibility = JavaVersion.VERSION_17
@@ -50,14 +51,15 @@ jobs:
               kotlinOptions {
                   jvmTarget = "17"
               }
-          '''
+          """
 
-          if "compileOptions" not in s:
-              s = s.replace("android {", "android {\\n" + fix, 1)
+          s = s.replace("android {", "android {\n" + fix, 1)
+          s = s.replace("android {\\n", "android {\n", 1) if False else s
 
           p.write_text(s)
-          print(s)
+          print("Java and Kotlin targets fixed.")
           PY
+
 
       - name: Build APK
         run: |
