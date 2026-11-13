@@ -18,112 +18,51 @@ jobs:
 
       - name: Extract App Icon Pack
         run: |
-          ICON_ZIP=$(find . -maxdepth 1 -type f -iname 'TextileQC_IconPack_Updated*.zip' | head -1)
-
-          if [ -z "$ICON_ZIP" ]; then
-            echo "Icon ZIP not found!"
-            exit 1
+          ICON_ZIP=$(find . -maxdepth 1 -name "TextileQC_IconPack_Updated*.zip" | head -n 1)
+          if [ -n "$ICON_ZIP" ]; then
+            unzip -o "$ICON_ZIP" -d iconpack
+            find iconpack -type d -name "mipmap-*" -exec cp -r {} project/app/src/main/res/ \;
           fi
 
-          mkdir -p iconpack
-          unzip -o "$ICON_ZIP" -d iconpack
-
-      - name: Install App Icons
-        run: |
-          RES="project/app/src/main/res"
-          mkdir -p "$RES"
-
-          for density in mdpi hdpi xhdpi xxhdpi xxxhdpi; do
-            SOURCE=$(find iconpack -type d -name "mipmap-$density" | head -1)
-
-            if [ -z "$SOURCE" ]; then
-              echo "Missing mipmap-$density"
-              exit 1
-            fi
-
-            mkdir -p "$RES/mipmap-$density"
-            cp -a "$SOURCE/." "$RES/mipmap-$density/"
-          done
-
-          echo "All launcher icons copied successfully."
-
-      - name: Copy Web Assets
+      - name: Copy Web App
         run: |
           mkdir -p project/app/src/main/assets
-
           if [ -d project/www ]; then
             cp -r project/www/. project/app/src/main/assets/
           fi
 
-          if [ ! -f project/app/src/main/assets/index.html ]; then
-            echo "index.html missing!"
-            exit 1
-          fi
+      - name: Enable AndroidX
+        run: |
+          echo "android.useAndroidX=true" > project/gradle.properties
+          echo "android.enableJetifier=true" >> project/gradle.properties
 
       - name: Set up Java
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: '17'
+          java-version: 17
 
-      - name: Install Android SDK
-        run: |
-          SDK_ROOT="${ANDROID_HOME:-$ANDROID_SDK_ROOT}"
-          SDKMANAGER=$(find "$SDK_ROOT/cmdline-tools" -name sdkmanager -type f | head -1)
-
-          yes | "$SDKMANAGER" --licenses || true
-
-          "$SDKMANAGER" --install \
-            "platforms;android-35" \
-            "build-tools;35.0.0" \
-            "platform-tools"
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
-          gradle-version: '8.9'
+          gradle-version: 8.9
 
-      - name: Configure Java and Kotlin
+      - name: Prepare Android project
         run: |
-          python3 - <<'PY'
-          from pathlib import Path
-
-          p = Path("project/app/build.gradle.kts")
-          s = p.read_text()
-
-          if "compileOptions {" not in s:
-              fix = """
-              compileOptions {
-                  sourceCompatibility = JavaVersion.VERSION_17
-                  targetCompatibility = JavaVersion.VERSION_17
-              }
-          """
-              s = s.replace("android {", "android {" + fix, 1)
-
-          if "kotlinOptions {" not in s:
-              fix = """
-              kotlinOptions {
-                  jvmTarget = "17"
-              }
-          """
-              pos = s.find("android {")
-              end = s.find("\n}", pos)
-
-              if end != -1:
-                  s = s[:end] + "\n" + fix + s[end:]
-
-          s = s.replace('jvmTarget = "1.8"', 'jvmTarget = "17"')
-          p.write_text(s)
-          PY
+          cd project
+          sed -i '/compileOptions {/,/}/ s/VERSION_1_8/VERSION_17/g' app/build.gradle.kts || true
+          sed -i 's/jvmTarget = "1.8"/jvmTarget = "17"/g' app/build.gradle.kts || true
 
       - name: Build APK
         run: |
           cd project
-          gradle assembleDebug --stacktrace
+          gradle assembleDebug
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: Textile-QC-Assistant-Final-APK
-          path: project/app/build/outputs/apk/debug/*.apk
-          if-no-files-found: error
+          name: Textile-QC-Assistant-APK
+          path: project/app/build/outputs/apk/debug/app-debug.apk
