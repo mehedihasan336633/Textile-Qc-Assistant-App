@@ -12,49 +12,79 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Extract Android project
-        run: |
-          unzip -o Textile_QC_Assistant_Android_Project.zip -d project
-
-      - name: Extract App Icon Pack
-        run: |
-          ICON_ZIP=$(find . -maxdepth 1 -name "TextileQC_IconPack_Updated*.zip" | head -n 1)
-          if [ -n "$ICON_ZIP" ]; then
-            unzip -o "$ICON_ZIP" -d iconpack
-            find iconpack -type d -name "mipmap-*" -exec cp -r {} project/app/src/main/res/ \;
-          fi
-
-      - name: Copy Web App
-        run: |
-          mkdir -p project/app/src/main/assets
-          if [ -d project/www ]; then
-            cp -r project/www/. project/app/src/main/assets/
-          fi
-
-      - name: Enable AndroidX
-        run: |
-          echo "android.useAndroidX=true" > project/gradle.properties
-          echo "android.enableJetifier=true" >> project/gradle.properties
-
-      - name: Set up Java
+      - name: Set up Java 17
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: 17
+          java-version: '17'
 
       - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
+        shell: bash
+        run: |
+          SDK_ROOT="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
+          echo "ANDROID_HOME=$SDK_ROOT" >> "$GITHUB_ENV"
+          echo "ANDROID_SDK_ROOT=$SDK_ROOT" >> "$GITHUB_ENV"
+
+          SDKMANAGER=$(find "$SDK_ROOT/cmdline-tools" -name sdkmanager -type f | head -n 1)
+
+          if [ -z "$SDKMANAGER" ]; then
+            echo "ERROR: sdkmanager not found"
+            exit 1
+          fi
+
+          yes | "$SDKMANAGER" --licenses || true
+
+          "$SDKMANAGER" \
+            "platform-tools" \
+            "platforms;android-35" \
+            "build-tools;35.0.0"
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
-          gradle-version: 8.9
+          gradle-version: '8.9'
+
+      - name: Extract Android project
+        run: |
+          unzip -o Textile_QC_Assistant_Android_Project.zip -d project
+
+      - name: Fix Java and Kotlin targets
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          p = Path("project/app/build.gradle.kts")
+          s = p.read_text()
+
+          s = re.sub(r'compileOptions\s*\{[^{}]*\}', '', s)
+          s = re.sub(r'kotlinOptions\s*\{[^{}]*\}', '', s)
+
+          pos = s.rfind('}')
+          if pos < 0:
+              raise SystemExit("Could not find android block")
+
+          fix = """
+              compileOptions {
+                  sourceCompatibility = JavaVersion.VERSION_17
+                  targetCompatibility = JavaVersion.VERSION_17
+              }
+
+              kotlinOptions {
+                  jvmTarget = "17"
+              }
+          """
+
+          s = s[:pos] + fix + s[pos:]
+          p.write_text(s)
+
+          print("Java and Kotlin targets fixed.")
+          PY
 
       - name: Prepare Android project
         run: |
-          cd project
-          sed -i '/compileOptions {/,/}/ s/VERSION_1_8/VERSION_17/g' app/build.gradle.kts || true
-          sed -i 's/jvmTarget = "1.8"/jvmTarget = "17"/g' app/build.gradle.kts || true
+          mkdir -p project/gradle
+          printf "android.useAndroidX=true\nandroid.enableJetifier=true\n" >> project/gradle.properties
 
       - name: Build APK
         run: |
