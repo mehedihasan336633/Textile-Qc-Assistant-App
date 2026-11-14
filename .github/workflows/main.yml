@@ -9,62 +9,51 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repository
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up Java 17
+      - name: Setup Java
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
 
-      - name: Set up Android SDK
-        shell: bash
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android SDK packages
         run: |
-          SDK_ROOT="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
-          echo "ANDROID_HOME=$SDK_ROOT" >> "$GITHUB_ENV"
-          echo "ANDROID_SDK_ROOT=$SDK_ROOT" >> "$GITHUB_ENV"
+          sdkmanager "platform-tools" "platforms;android-35" "build-tools;35.0.0"
 
-          SDKMANAGER=$(find "$SDK_ROOT/cmdline-tools" -name sdkmanager -type f | head -n 1)
-
-          if [ -z "$SDKMANAGER" ]; then
-            echo "ERROR: sdkmanager not found"
-            exit 1
-          fi
-
-          yes | "$SDKMANAGER" --licenses || true
-
-          "$SDKMANAGER" \
-            "platform-tools" \
-            "platforms;android-35" \
-            "build-tools;35.0.0"
-
-      - name: Set up Gradle
+      - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
 
-      - name: Extract Android project
+      - name: Extract Android Project
         run: |
           unzip -o Textile_QC_Assistant_Android_Project.zip -d project
 
-      - name: Fix Java and Kotlin targets
+      - name: Fix Android Build Configuration
         run: |
-          python3 - <<'PY'
-          from pathlib import Path
-          import re
+          cat > project/app/build.gradle.kts <<'EOF'
+          plugins {
+              id("com.android.application")
+              id("org.jetbrains.kotlin.android")
+          }
 
-          p = Path("project/app/build.gradle.kts")
-          s = p.read_text()
+          android {
+              namespace = "com.textileqc.assistant"
+              compileSdk = 35
 
-          s = re.sub(r'compileOptions\s*\{[^{}]*\}', '', s)
-          s = re.sub(r'kotlinOptions\s*\{[^{}]*\}', '', s)
+              defaultConfig {
+                  applicationId = "com.textileqc.assistant"
+                  minSdk = 23
+                  targetSdk = 35
+                  versionCode = 1
+                  versionName = "1.0"
+              }
 
-          pos = s.rfind('}')
-          if pos < 0:
-              raise SystemExit("Could not find android block")
-
-          fix = """
               compileOptions {
                   sourceCompatibility = JavaVersion.VERSION_17
                   targetCompatibility = JavaVersion.VERSION_17
@@ -73,18 +62,12 @@ jobs:
               kotlinOptions {
                   jvmTarget = "17"
               }
-          """
+          }
 
-          s = s[:pos] + fix + s[pos:]
-          p.write_text(s)
-
-          print("Java and Kotlin targets fixed.")
-          PY
-
-      - name: Prepare Android project
-        run: |
-          mkdir -p project/gradle
-          printf "android.useAndroidX=true\nandroid.enableJetifier=true\n" >> project/gradle.properties
+          dependencies {
+              implementation("androidx.core:core-ktx:1.15.0")
+          }
+          EOF
 
       - name: Build APK
         run: |
