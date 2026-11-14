@@ -41,6 +41,12 @@ jobs:
         run: |
           unzip -o Textile_QC_Assistant_Android_Project.zip -d project
 
+      - name: Enable AndroidX
+        run: |
+          mkdir -p project
+          touch project/gradle.properties
+          grep -qxF 'android.useAndroidX=true' project/gradle.properties || echo 'android.useAndroidX=true' >> project/gradle.properties
+
       - name: Fix Android Build Configuration
         run: |
           cat > project/app/build.gradle <<'EOF'
